@@ -13,7 +13,26 @@
 
 //
 
+void driveStop() {
+    OC1R = 0;
+}
+
+void driveForwards() {
+    OC1R = 4000;
+    _LATB1 = 1;
+    _LATA1 = 0;
+}
+
+void driveBackwards() {
+    OC1R = 4000;
+    _LATB1 = 0;
+    _LATA1 = 1;
+}
+
 int count=0;
+double rev=0;
+static int countToRevConvsersion = 20 * 8; //1/8 step
+
 void __attribute__((interrupt, no_auto_psv)) _OC2Interrupt(void)
 {
     
@@ -25,25 +44,21 @@ void __attribute__((interrupt, no_auto_psv)) _OC2Interrupt(void)
     
     
     count++;
-    int rev = 200 * 4; //1/4 step
-    if (count <= rev*3) {
-        _LATB1 = 1;
-        _LATA1 = 0;
-    }
-    else if (count <= rev*6) {
-        _LATB1 = 0;
-        _LATA1 = 1;
-    }
-    else if (count <= rev*12) {
-        _LATB1 = 1;
-        _LATA1 = 0;
-    }
-    else if (count <= rev*18) {
-        _LATB1 = 0;
-        _LATA1 = 1;
-    }
-    else {
+    if (count == countToRevConvsersion) {
         count = 0;
+        rev+=.1;
+    }
+    
+    if (rev <= 3) {
+        driveForwards();
+    } else if (rev <= 3.2) {
+        driveStop();
+    } else if (rev <= 6.2) {
+        driveBackwards();
+    } else if (rev <= 6.4) {
+        driveStop();
+    }  else {
+        rev = 0;
     }
     
     // Place in this ISR whatever code should be executed
@@ -64,17 +79,28 @@ int main(void) {
     // ANS 0 = Digital
 	_TRISB2 = 0;		// TRISA/B, pg. 45 datasheet
 	_ANSB2 = 0;			// ANSA/B, pg. 136-137
-    _TRISB1 = 0;		// TRISA/B, pg. 45 datasheet
-	_ANSB1 = 0;
-    _TRISB0 = 0;
-    _ANSB0 = 0;
     _TRISA0 = 1;		// TRISA/B, pg. 45 datasheet
-	_ANSA0 = 1;			// ANSA/B, pg. 136-137
-    _TRISA1 = 0;
+	_ANSA0 = 0;			// ANSA/B, pg. 136-137
+    
+    
+    /* Wheels */
+    // ON OFF
+    _TRISA2 = 0; // P7
+    _TRISA2 = 0;
+    
+    // Wheel PWM
+    _TRISB0 = 0; // P4
+    _ANSB0 = 0;
+    
+    // Left Wheel
+    _TRISB1 = 0; // P5		
+	_ANSB1 = 0;
+    
+    // Right Wheel
+    _TRISA1 = 0; // P3
     _ANSA1 = 0;
     
     
-
 	/*** Select Voltage Reference Source ***/
 	// use AVdd for positive reference
 	_PVCFG = 00;		// AD1CON2<15:14>, pg. 212-213 datasheet
@@ -146,12 +172,12 @@ int main(void) {
     OC1CON1bits.OCTSEL = 0b111; // System (peripheral) clock as timing source
     OC1CON2bits.SYNCSEL = 0x1F;
     
-    OC2R = 1000;                // Set Output Compare value to achieve
+    OC2R = 500;                // Set Output Compare value to achieve
                                 // desired duty cycle. This is the number
                                 // of timer counts when the OC should send
                                 // the PWM signal low. The duty cycle as a
                                 // fraction is OC1R/OC1RS.
-    OC2RS = 1481;               // Period of OC1 to achieve desired PWM 
+    OC2RS = 4000/1;               // Period of OC1 to achieve desired PWM 
                                 // frequency, FPWM. See Equation 15-1
                                 // in the datasheet. For example, for
                                 // FPWM = 1 kHz, OC1RS = 3999. The OC1RS 
@@ -186,8 +212,7 @@ int main(void) {
     // Wait and let the PWM do its job behind the scenes
     while(1)
     {
-        
-        
+        _RA2 = _RA0;
     }
     
    
