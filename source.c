@@ -14,24 +14,32 @@
 //
 
 void driveStop() {
-    OC1R = 0;
+    OC2R = 0;
 }
 
 void driveForwards() {
-    OC1R = 4000;
+    OC2R = 100;
     _LATB1 = 1;
     _LATA1 = 0;
 }
 
 void driveBackwards() {
-    OC1R = 4000;
+    OC2R = 100;
     _LATB1 = 0;
     _LATA1 = 1;
 }
 
+void turnRight() {
+    OC2R = 100;
+    _LATB1 = 1;
+    _LATA1 = 1;
+}
+
+
+
 int count=0;
 double rev=0;
-static int countToRevConvsersion = 20 * 8; //1/8 step
+static int countToRevConvsersion = 2 * 8; //1/8 step
 
 void __attribute__((interrupt, no_auto_psv)) _OC2Interrupt(void)
 {
@@ -46,20 +54,32 @@ void __attribute__((interrupt, no_auto_psv)) _OC2Interrupt(void)
     count++;
     if (count == countToRevConvsersion) {
         count = 0;
-        rev+=.1;
+        rev+=.01;
     }
     
-    if (rev <= 3) {
+    if (rev <= 1) {
         driveForwards();
-    } else if (rev <= 3.2) {
-        driveStop();
-    } else if (rev <= 6.2) {
-        driveBackwards();
-    } else if (rev <= 6.4) {
-        driveStop();
-    }  else {
+    } else if (rev <= 1.73) {
+        turnRight();
+    } else if (rev <= 3) {
+        driveForwards();
+    } else if (rev <= 3.73) {
+        turnRight();
+    } else {
         rev = 0;
     }
+    
+//    if (rev <= 3.43) {
+//        driveForwards();
+//    } else if (rev <= 4) {
+//        turnRight();
+//    } else if (rev <= 6) {
+//        driveForwards();
+//    } else if (rev <= 7) {
+//        driveStop();
+//    }  else {
+//        rev = 0;
+//    }
     
     // Place in this ISR whatever code should be executed
     // when the timer reaches the period (PR1) that you
@@ -77,10 +97,10 @@ int main(void) {
     // TRIS 0 = Output
     // ANS 1 = Analog
     // ANS 0 = Digital
-	_TRISB2 = 0;		// TRISA/B, pg. 45 datasheet
-	_ANSB2 = 0;			// ANSA/B, pg. 136-137
-    _TRISA0 = 1;		// TRISA/B, pg. 45 datasheet
-	_ANSA0 = 0;			// ANSA/B, pg. 136-137
+    _TRISB2 = 0;        // TRISA/B, pg. 45 datasheet
+    _ANSB2 = 0;         // ANSA/B, pg. 136-137
+    _TRISA0 = 1;        // TRISA/B, pg. 45 datasheet
+    _ANSA0 = 0;         // ANSA/B, pg. 136-137
     
     
     /* Wheels */
@@ -93,60 +113,60 @@ int main(void) {
     _ANSB0 = 0;
     
     // Left Wheel
-    _TRISB1 = 0; // P5		
-	_ANSB1 = 0;
+    _TRISB1 = 0; // P5      
+    _ANSB1 = 0;
     
     // Right Wheel
     _TRISA1 = 0; // P3
     _ANSA1 = 0;
     
     
-	/*** Select Voltage Reference Source ***/
-	// use AVdd for positive reference
-	_PVCFG = 00;		// AD1CON2<15:14>, pg. 212-213 datasheet
-	// use AVss for negative reference
-	_NVCFG = 0;			// AD1CON2<13>
+    /*** Select Voltage Reference Source ***/
+    // use AVdd for positive reference
+    _PVCFG = 00;        // AD1CON2<15:14>, pg. 212-213 datasheet
+    // use AVss for negative reference
+    _NVCFG = 0;         // AD1CON2<13>
 
 
-	/*** Select Analog Conversion Clock Rate ***/
-	// make sure Tad is at least 600ns, see Table 29-41 datasheet
-	_ADCS = 3;	// AD1CON3<7:0>, pg. 213 datasheet
+    /*** Select Analog Conversion Clock Rate ***/
+    // make sure Tad is at least 600ns, see Table 29-41 datasheet
+    _ADCS = 3;  // AD1CON3<7:0>, pg. 213 datasheet
 
 
-	/*** Select Sample/Conversion Sequence ***/
-	// use auto-convert
-	_SSRC = 0b0111;		// AD1CON1<7:4>, pg. 211 datasheet
-	// use auto-sample
-	_ASAM = 1;			// AD1CON1<2>
-	// choose a sample time >= 1 Tad, see Table 29-41 datasheet
-	_SAMC = 1;		// AD1CON3<12:8>
+    /*** Select Sample/Conversion Sequence ***/
+    // use auto-convert
+    _SSRC = 0b0111;     // AD1CON1<7:4>, pg. 211 datasheet
+    // use auto-sample
+    _ASAM = 1;          // AD1CON1<2>
+    // choose a sample time >= 1 Tad, see Table 29-41 datasheet
+    _SAMC = 1;      // AD1CON3<12:8>
 
 
-	/*** Choose Analog Channels to be Used ***/
-	// scan inputs
-	_CSCNA = 1;			// AD1CON2<10>
-	// choose which channels to scan, e.g. for ch AN12, set _CSS12 = 1;
-	_CSS4 = 1;			// AD1CSSH/L, pg. 217
+    /*** Choose Analog Channels to be Used ***/
+    // scan inputs
+    _CSCNA = 1;         // AD1CON2<10>
+    // choose which channels to scan, e.g. for ch AN12, set _CSS12 = 1;
+    _CSS4 = 1;          // AD1CSSH/L, pg. 217
     _CSS0 = 1;
 
-	/*** Select How Results are Presented in Buffer ***/
-	// set 12-bit resolution
-	_MODE12 = 1;		// AD1CON1<10>
-	// use absolute decimal format
-	_FORM = 0;			// AD1CON1<9:8>
-	// load results into buffer determined by converted channel, e.g. ch AN12 
+    /*** Select How Results are Presented in Buffer ***/
+    // set 12-bit resolution
+    _MODE12 = 1;        // AD1CON1<10>
+    // use absolute decimal format
+    _FORM = 0;          // AD1CON1<9:8>
+    // load results into buffer determined by converted channel, e.g. ch AN12 
     // results appear in ADC1BUF12
-	_BUFREGEN = 1;		// AD1CON2<11>
+    _BUFREGEN = 1;      // AD1CON2<11>
 
 
-	/*** Select Interrupt Rate ***/
-	// interrupt rate should reflect number of analog channels used, e.g. if 
+    /*** Select Interrupt Rate ***/
+    // interrupt rate should reflect number of analog channels used, e.g. if 
     // 5 channels, interrupt every 5th sample
-	_SMPI = 1;		// AD1CON2<6:2>
+    _SMPI = 1;      // AD1CON2<6:2>
 
 
-	/*** Turn on A/D Module ***/
-	_ADON = 1;			// AD1CON1<15>
+    /*** Turn on A/D Module ***/
+    _ADON = 1;          // AD1CON1<15>
     
     OC2CON1 = 0;
     OC2CON2 = 0;
@@ -177,7 +197,7 @@ int main(void) {
                                 // of timer counts when the OC should send
                                 // the PWM signal low. The duty cycle as a
                                 // fraction is OC1R/OC1RS.
-    OC2RS = 4000/1;               // Period of OC1 to achieve desired PWM 
+    OC2RS = 3999/1;               // Period of OC1 to achieve desired PWM 
                                 // frequency, FPWM. See Equation 15-1
                                 // in the datasheet. For example, for
                                 // FPWM = 1 kHz, OC1RS = 3999. The OC1RS 
