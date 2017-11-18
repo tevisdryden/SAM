@@ -10,6 +10,7 @@
 #pragma config FNOSC = FRC
 #define FCY 4000000
 #include <libpic30.h>
+#pragma config OSCIOFNC = OFF
 
 //
 
@@ -19,19 +20,19 @@ void driveStop() {
 
 void driveForwards() {
     OC2R = 100;
-    _LATB1 = 1;
+    _LATB2 = 1;
     _LATA1 = 0;
 }
 
 void driveBackwards() {
     OC2R = 100;
-    _LATB1 = 0;
+    _LATB2 = 0;
     _LATA1 = 1;
 }
 
 void turnRight() {
     OC2R = 100;
-    _LATB1 = 1;
+    _LATB2 = 1;
     _LATA1 = 1;
 }
 
@@ -113,12 +114,16 @@ int main(void) {
     _ANSB0 = 0;
     
     // Left Wheel
-    _TRISB1 = 0; // P5      
-    _ANSB1 = 0;
+    _TRISB2 = 0; // P5      
+    _ANSB2 = 0;
     
     // Right Wheel
     _TRISA1 = 0; // P3
     _ANSA1 = 0;
+    
+    // Goal IR Sensor
+    _TRISA3 = 1; // P8
+    _ANSA3 = 1;
     
     
     /*** Select Voltage Reference Source ***/
@@ -146,8 +151,8 @@ int main(void) {
     // scan inputs
     _CSCNA = 1;         // AD1CON2<10>
     // choose which channels to scan, e.g. for ch AN12, set _CSS12 = 1;
-    _CSS4 = 1;          // AD1CSSH/L, pg. 217
-    _CSS0 = 1;
+    _CSS14 = 1;          // AD1CSSH/L, pg. 217
+    _CSS15 = 1;
 
     /*** Select How Results are Presented in Buffer ***/
     // set 12-bit resolution
@@ -225,14 +230,34 @@ int main(void) {
     _OC2IP=4; // Set Interrupt Priority
     _OC2IE=1; // Enable OC2 Interrupt
    _OC2IF=0; // turns flag off
+   
+   _OC2IE=0; // NO LONGER NEEDED ATM
     
     //-----------------------------------------------------------
     // RUN
 
     // Wait and let the PWM do its job behind the scenes
+   int x = 0;
+   int faults = 0;
+   int going = 0;
     while(1)
     {
         _RA2 = _RA0;
+        if((ADC1BUF14 > 1365)&& x == 400) {
+            driveBackwards();
+            //driveForwards();
+            going = 1;
+        } else if(ADC1BUF14 > 1117) {
+            x++;
+        } else if((faults < 2000)&&(going == 1)) {
+            faults++;
+         }else {
+            turnRight();
+            x = 0;
+            faults = 0;
+            going = 0;
+        }
+
     }
     
    
