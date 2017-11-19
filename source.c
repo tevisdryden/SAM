@@ -247,9 +247,9 @@ int main(void) {
             driveBackwards();
             //driveForwards();
             going = 1;
-        } else if(ADC1BUF14 > 1117) {
+        } else if(ADC1BUF14 > 1217) {
             x++;
-        } else if((faults < 2000)&&(going == 1)) {
+        } else if((faults < 4000)&&(going == 1)) {
             faults++;
          }else {
             turnRight();
