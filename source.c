@@ -42,6 +42,9 @@ int count=0;
 double rev=0;
 static int countToRevConvsersion = 2 * 8; //1/8 step
 
+enum setUpStates {DELAY, DRIVEOUT, BRIDGING, DRIVEBACK} setUpPossition;
+enum states {FINDINGCORNER, SETTINGUP, SHOOTING} state;
+
 void __attribute__((interrupt, no_auto_psv)) _OC2Interrupt(void)
 {
     
@@ -51,8 +54,43 @@ void __attribute__((interrupt, no_auto_psv)) _OC2Interrupt(void)
     // PLACE CODE TO CLEAR THE TIMER1 INTERRUPT FLAG HERE
     _OC2IF = 0;
     
-    
     count++;
+    // Initial Delay
+    if (setUpPossition == DELAY) {
+        if(count == 100) {
+            count = 0;
+            _RA2 = 1;
+            setUpPossition++;
+        }
+    } else if ((setUpPossition == DRIVEOUT)||(setUpPossition == DRIVEBACK)) {
+        // Conversion
+        if (count == countToRevConvsersion) {
+            count = 0;
+            rev+=.01;
+        }
+        
+        if(setUpPossition == DRIVEOUT) {
+            if(rev <= 2) {
+                driveForwards();
+            } else {
+                rev = 0;
+                _RA2 = 0;
+                _OC2IE = 0;
+            }
+        } else if(setUpPossition == DRIVEBACK) {
+            if(rev <= 1) {
+                driveBackwards();
+            } else {
+                rev = 0;
+                _RA2 = 0;
+                _OC2IE = 0;
+                state++;
+            }
+        }
+    }
+    
+    
+    /* This is the code for the turning video!
     if (count == countToRevConvsersion) {
         count = 0;
         rev+=.01;
@@ -69,6 +107,7 @@ void __attribute__((interrupt, no_auto_psv)) _OC2Interrupt(void)
     } else {
         rev = 0;
     }
+     */
     
 //    if (rev <= 3.43) {
 //        driveForwards();
@@ -124,6 +163,12 @@ int main(void) {
     // Goal IR Sensor
     _TRISA3 = 1; // P8
     _ANSA3 = 1;
+    
+    // Bumper Sensors
+    _TRISB9 = 1; // P13
+    
+    // Ball LED
+    _TRISB7 = 0; // P11
     
     
     /*** Select Voltage Reference Source ***/
@@ -229,7 +274,7 @@ int main(void) {
     OC1CON2bits.OCTRIG = 0;
     _OC2IP=4; // Set Interrupt Priority
     _OC2IE=1; // Enable OC2 Interrupt
-   _OC2IF=0; // turns flag off
+    _OC2IF=0; // turns flag off
    
    _OC2IE=0; // NO LONGER NEEDED ATM
     
@@ -240,22 +285,46 @@ int main(void) {
    int x = 0;
    int faults = 0;
    int going = 0;
+   
+   state = FINDINGCORNER;
+   
+   
     while(1)
     {
-        _RA2 = _RA0;
-        if((ADC1BUF14 > 1365)&& x == 400) {
-            driveBackwards();
-            //driveForwards();
-            going = 1;
-        } else if(ADC1BUF14 > 1217) {
-            x++;
-        } else if((faults < 4000)&&(going == 1)) {
-            faults++;
-         }else {
-            turnRight();
-            x = 0;
-            faults = 0;
-            going = 0;
+        if (state == FINDINGCORNER) {
+            _RA2 = _RA0;
+            if((ADC1BUF14 > 1365)&& x == 400) {
+                driveBackwards();
+                //driveForwards();
+                going = 1;
+            } else if(ADC1BUF14 > 1217) {
+                x++;
+            } else if((faults < 4000)&&(going == 1)) {
+                faults++;
+             }else {
+                turnRight();
+                x = 0;
+                faults = 0;
+                going = 0;
+            }
+            
+            //TODO Bumpers to send it into next state.
+            if (_RB9) {
+                state++;
+                setUpPossition = DELAY;
+                
+                //driveForwards();
+                
+                _OC2IE = 1; // Start Counting
+                _RA2 = 0;
+            }
+        } else if (state == SETTINGUP) {
+            if (setUpPossition == BRIDGING) {
+                // Turn bridge
+                setUpPossition == DRIVEBACK;
+                _RA2 = 1;
+                _OC2IE = 1;
+            }
         }
 
     }
