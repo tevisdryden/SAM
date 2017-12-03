@@ -11,8 +11,7 @@
 #define FCY 4000000
 #include <libpic30.h>
 #pragma config OSCIOFNC = OFF
-
-//
+#pragma config ICS = PGx3
 
 void driveStop() {
     OC2R = 0;
@@ -42,7 +41,7 @@ int count=0;
 double rev=0;
 static int countToRevConvsersion = 2 * 8; //1/8 step
 
-enum setUpStates {DELAY, DRIVEOUT, BRIDGING, DRIVEBACK} setUpPossition;
+enum setUpStates {DELAY, DRIVEOUT, BRIDGING, DRIVEBACK, CHANGESTATE} setUpPosition;
 enum states {FINDINGCORNER, SETTINGUP, SHOOTING} state;
 
 void __attribute__((interrupt, no_auto_psv)) _OC2Interrupt(void)
@@ -56,35 +55,36 @@ void __attribute__((interrupt, no_auto_psv)) _OC2Interrupt(void)
     
     count++;
     // Initial Delay
-    if (setUpPossition == DELAY) {
+    if (setUpPosition == DELAY) {
         if(count == 100) {
             count = 0;
             _RA2 = 1;
-            setUpPossition++;
+            setUpPosition++;
         }
-    } else if ((setUpPossition == DRIVEOUT)||(setUpPossition == DRIVEBACK)) {
+    } else if ((setUpPosition == DRIVEOUT)||(setUpPosition == DRIVEBACK)) {
         // Conversion
         if (count == countToRevConvsersion) {
             count = 0;
             rev+=.01;
         }
         
-        if(setUpPossition == DRIVEOUT) {
-            if(rev <= 2) {
+        if(setUpPosition == DRIVEOUT) {
+            if(rev <= 2.1) {
                 driveForwards();
             } else {
                 rev = 0;
                 _RA2 = 0;
                 _OC2IE = 0;
+                setUpPosition++;
             }
-        } else if(setUpPossition == DRIVEBACK) {
-            if(rev <= 1) {
+        } else if(setUpPosition == DRIVEBACK) {
+            if(rev <= .7) {
                 driveBackwards();
             } else {
                 rev = 0;
                 _RA2 = 0;
                 _OC2IE = 0;
-                state++;
+                setUpPosition++;
             }
         }
     }
@@ -130,6 +130,17 @@ void __attribute__((interrupt, no_auto_psv)) _OC2Interrupt(void)
     
 }
 
+void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void)
+{
+    // Clear Timer1 interrupt flag so that the program doesn't
+    // just jump back to this function when it returns to the
+    // while(1) loop.
+    _T1IF = 0;
+    _LATB8 = _RB8 ^ 1;
+    // Change state of pin 14 (RA6)
+    
+}
+
 int main(void) {
     
     /*** Configure Desired Port Pins as Analog Inputs ***/
@@ -168,7 +179,8 @@ int main(void) {
     _TRISB9 = 1; // P13
     
     // Ball LED
-    _TRISB7 = 0; // P11
+    _TRISB8 = 0; // P11
+    _LATB8 = 0; // Start Off
     
     
     /*** Select Voltage Reference Source ***/
@@ -223,7 +235,7 @@ int main(void) {
     
     OC1CON1 = 0;
     OC1CON2 = 0;
-    OC1R = 4000;                // Set Output Compare value to achieve
+    OC1R = 3000;                // Set Output Compare value to achieve
                                 // desired duty cycle. This is the number
                                 // of timer counts when the OC should send
                                 // the PWM signal low. The duty cycle as a
@@ -231,7 +243,7 @@ int main(void) {
     
                                 // Tpwm = (OC1RS + 1) * Tcy * PRESCALE
     
-    OC1RS = 7999;               // Period of OC1 to achieve desired PWM 
+    OC1RS = 79999;               // Period of OC1 to achieve desired PWM 
                                 // frequency, FPWM. See Equation 15-1
                                 // in the datasheet. For example, for
                                 // FPWM = 1 kHz, OC1RS = 3999. The OC1RS 
@@ -242,7 +254,7 @@ int main(void) {
     OC1CON1bits.OCTSEL = 0b111; // System (peripheral) clock as timing source
     OC1CON2bits.SYNCSEL = 0x1F;
     
-    OC2R = 500;                // Set Output Compare value to achieve
+    OC2R = 1000;                // Set Output Compare value to achieve
                                 // desired duty cycle. This is the number
                                 // of timer counts when the OC should send
                                 // the PWM signal low. The duty cycle as a
@@ -277,6 +289,19 @@ int main(void) {
     _OC2IF=0; // turns flag off
    
    _OC2IE=0; // NO LONGER NEEDED ATM
+   
+   
+   // Timer for blinking laser!!!!!
+   _TON = 1;           // Turn off Timer1
+   _TCS = 0; // internal clock
+   _TCKPS = 0b11; // 256 prescale
+   
+   _T1IP = 4;          // Select Timer1 interrupt priority
+   _T1IE = 0;          // Enable Timer1 interrupt
+   _T1IF = 0;          // Clear Timer1 interrupt flag
+   PR1 = 15625;
+   TMR1 = 0;
+   
     
     //-----------------------------------------------------------
     // RUN
@@ -311,7 +336,7 @@ int main(void) {
             //TODO Bumpers to send it into next state.
             if (_RB9) {
                 state++;
-                setUpPossition = DELAY;
+                setUpPosition = DELAY;
                 
                 //driveForwards();
                 
@@ -319,12 +344,24 @@ int main(void) {
                 _RA2 = 0;
             }
         } else if (state == SETTINGUP) {
-            if (setUpPossition == BRIDGING) {
-                // Turn bridge
-                setUpPossition == DRIVEBACK;
+            if (setUpPosition == BRIDGING) {
+                OC1R = 10500;
+                //TODO Turn bridge
+                
+                
+                setUpPosition++;
                 _RA2 = 1;
                 _OC2IE = 1;
+            } else if (setUpPosition == 
+                    
+                    CHANGESTATE) {
+                state++;
+            
+                _T1IE = 1;
+                TMR1 = 0;
             }
+        } else if (state == SHOOTING) {
+            
         }
 
     }
