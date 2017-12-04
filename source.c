@@ -130,6 +130,7 @@ void __attribute__((interrupt, no_auto_psv)) _OC2Interrupt(void)
     
 }
 
+int side = 0;
 void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void)
 {
     // Clear Timer1 interrupt flag so that the program doesn't
@@ -137,6 +138,13 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void)
     // while(1) loop.
     _T1IF = 0;
     _LATB8 = _RB8 ^ 1;
+    if (side) {
+        OC1R = 10500;
+        side = 0;
+    } else {
+        OC1R = 9500;
+        side = 1;
+    }
     // Change state of pin 14 (RA6)
     
 }
