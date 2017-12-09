@@ -7,8 +7,8 @@
 
 
 #include "xc.h"
-#pragma config FNOSC = FRC
-#define FCY 4000000
+#pragma config FNOSC = FRCDIV
+#define FCY 1000000
 #include <libpic30.h>
 #pragma config OSCIOFNC = OFF
 #pragma config ICS = PGx3
@@ -138,10 +138,10 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void)
     // while(1) loop.
     _T1IF = 0;
     if (side) {
-        OC1R = 10500;
+        OC1R = 10500/4;
         side = 0;
     } else {
-        OC1R = 9500;
+        OC1R = 9500/4;
         side = 1;
     }
     // Change state of pin 14 (RA6)
@@ -158,6 +158,7 @@ void __attribute__((interrupt, no_auto_psv)) _T2Interrupt(void)
 }
 
 int main(void) {
+    _RCDIV = 0b010;
     
     /*** Configure Desired Port Pins as Analog Inputs ***/
     // TRIS 1 = Input
@@ -267,7 +268,7 @@ int main(void) {
     OC3CON1 = 0;
     OC3CON2 = 0;
     
-    OC3R = 7000;                // Set Output Compare value to achieve
+    OC3R = 1700;                // Set Output Compare value to achieve
                                 // desired duty cycle. This is the number
                                 // of timer counts when the OC should send
                                 // the PWM signal low. The duty cycle as a
@@ -275,7 +276,7 @@ int main(void) {
     
                                 // Tpwm = (OC1RS + 1) * Tcy * PRESCALE
     
-    OC3RS = 79999;               // Period of OC1 to achieve desired PWM 
+    OC3RS = 33332;               // Period of OC1 to achieve desired PWM 
                                 // frequency, FPWM. See Equation 15-1
                                 // in the datasheet. For example, for
                                 // FPWM = 1 kHz, OC1RS = 3999. The OC1RS 
@@ -289,7 +290,7 @@ int main(void) {
     OC3CON1bits.OCM = 0b110;
     OC3CON2bits.OCTRIG = 0;
     
-    OC1R = 3000;                // Set Output Compare value to achieve
+    OC1R = 3000/4;                // Set Output Compare value to achieve
                                 // desired duty cycle. This is the number
                                 // of timer counts when the OC should send
                                 // the PWM signal low. The duty cycle as a
@@ -297,7 +298,7 @@ int main(void) {
     
                                 // Tpwm = (OC1RS + 1) * Tcy * PRESCALE
     
-    OC1RS = 79999;               // Period of OC1 to achieve desired PWM 
+    OC1RS = 19999;               // Period of OC1 to achieve desired PWM 
                                 // frequency, FPWM. See Equation 15-1
                                 // in the datasheet. For example, for
                                 // FPWM = 1 kHz, OC1RS = 3999. The OC1RS 
@@ -308,12 +309,12 @@ int main(void) {
     OC1CON1bits.OCTSEL = 0b111; // System (peripheral) clock as timing source
     OC1CON2bits.SYNCSEL = 0x1F;
     
-    OC2R = 1000;                // Set Output Compare value to achieve
+    OC2R = 1000/4;                // Set Output Compare value to achieve
                                 // desired duty cycle. This is the number
                                 // of timer counts when the OC should send
                                 // the PWM signal low. The duty cycle as a
                                 // fraction is OC1R/OC1RS.
-    OC2RS = 3999/1;               // Period of OC1 to achieve desired PWM 
+    OC2RS = 999;               // Period of OC1 to achieve desired PWM 
                                 // frequency, FPWM. See Equation 15-1
                                 // in the datasheet. For example, for
                                 // FPWM = 1 kHz, OC1RS = 3999. The OC1RS 
@@ -351,7 +352,7 @@ int main(void) {
    _T1IP = 4;          // Select Timer1 interrupt priority
    _T1IE = 0;          // Enable Timer1 interrupt
    _T1IF = 0;          // Clear Timer1 interrupt flag
-   PR1 = 15625;
+   PR1 = 15625/4;
    TMR1 = 0;
    
    // Timer for black ball!!!!!
@@ -374,6 +375,8 @@ int main(void) {
    int faults = 0;
    int going = 0;
    
+   int bumperDebouncer = 0;
+   
    state = FINDINGCORNER;
    
    
@@ -381,13 +384,13 @@ int main(void) {
     {
         if (state == FINDINGCORNER) {
             _RA2 = _RA0;
-            if((ADC1BUF14 > 1365)&& x == 400) {
+            if((ADC1BUF14 > 1365)&& x == 100) {
                 driveBackwards();
                 //driveForwards();
                 going = 1;
             } else if(ADC1BUF14 > 1217) {
                 x++;
-            } else if((faults < 4000)&&(going == 1)) {
+            } else if((faults < 1000)&&(going == 1)) {
                 faults++;
              }else {
                 turnRight();
@@ -397,18 +400,24 @@ int main(void) {
             }
             
             //TODO Bumpers to send it into next state.
+            
             if (_RB9) {
-                state++;
-                setUpPosition = DELAY;
-                
-                //driveForwards();
-                
-                _OC2IE = 1; // Start Counting
-                _RA2 = 0;
+                if(bumperDebouncer < 1000) {
+                    bumperDebouncer++;
+                } else {
+                    state++;
+                    setUpPosition = DELAY;
+
+                    //driveForwards();
+
+                    _OC2IE = 1; // Start Counting
+                    _RA2 = 0;
+                    bumperDebouncer = 0;
+                }
             }
         } else if (state == SETTINGUP) {
             if (setUpPosition == BRIDGING) {
-                OC1R = 10500;
+                OC1R = 10500/4;
                 //TODO Turn bridge
                 
                 
@@ -437,21 +446,27 @@ int main(void) {
                 _LATB8 = 1;
             }
         } else if (state == SHOOTING) {
-            if(blackBall) {
-                //PWM
-                //if()
-            } else if(ADC1BUF11 > 1365) {
-                //PWM
-                OC3R = 9500;
-            } else if(ADC1BUF12 > 1365) {
-                //PWM
-                OC3R = 6500;
-            } else if(ADC1BUF10 > 1365) {
-                //PWM
-                OC3R = 10500;
-             }else {
-                OC3R = 7000;
+            if (bumperDebouncer < 40000) {
+                OC3R = 1500;
+                bumperDebouncer++;
+            } else {
+                OC3R = 800;
             }
+//            if(blackBall) {
+//                //PWM
+//                //if()
+//            } else if(ADC1BUF11 > 1365) {
+//                //PWM
+//                OC3R = 800;
+//            } else if(ADC1BUF12 > 1365) {
+//                //PWM
+//                OC3R = 1500;
+//            } else if(ADC1BUF10 > 1365) {
+//                //PWM
+//                OC3R = 1500;
+//             }else {
+//                OC3R = 1500;
+//            }
         }
 
     }
