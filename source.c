@@ -137,7 +137,6 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void)
     // just jump back to this function when it returns to the
     // while(1) loop.
     _T1IF = 0;
-    _LATB8 = _RB8 ^ 1;
     if (side) {
         OC1R = 10500;
         side = 0;
@@ -146,6 +145,15 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void)
         side = 1;
     }
     // Change state of pin 14 (RA6)
+    
+}
+
+int blackBall = 0;
+void __attribute__((interrupt, no_auto_psv)) _T2Interrupt(void)
+{
+    _T2IF = 0;
+    blackBall = 0;
+    _T2IE = 0;
     
 }
 
@@ -186,9 +194,21 @@ int main(void) {
     // Bumper Sensors
     _TRISB9 = 1; // P13
     
-    // Ball LED
+    // Ball Shooter
     _TRISB8 = 0; // P11
     _LATB8 = 0; // Start Off
+    
+    // Left IR Sensor
+    _TRISB12 = 1; // P15
+    _ANSB12 = 1;
+    
+    // Center IR Sensor
+    _TRISB13 = 1; // P16
+    _ANSB13 = 1;
+    
+    // Right IR Sensor
+    _TRISB14 = 1; // P17
+    _ANSB14 = 1;
     
     
     /*** Select Voltage Reference Source ***/
@@ -217,7 +237,7 @@ int main(void) {
     _CSCNA = 1;         // AD1CON2<10>
     // choose which channels to scan, e.g. for ch AN12, set _CSS12 = 1;
     _CSS14 = 1;          // AD1CSSH/L, pg. 217
-    _CSS15 = 1;
+    
 
     /*** Select How Results are Presented in Buffer ***/
     // set 12-bit resolution
@@ -232,7 +252,7 @@ int main(void) {
     /*** Select Interrupt Rate ***/
     // interrupt rate should reflect number of analog channels used, e.g. if 
     // 5 channels, interrupt every 5th sample
-    _SMPI = 1;      // AD1CON2<6:2>
+    _SMPI = 0;      // AD1CON2<6:2>
 
 
     /*** Turn on A/D Module ***/
@@ -243,6 +263,32 @@ int main(void) {
     
     OC1CON1 = 0;
     OC1CON2 = 0;
+    
+    OC3CON1 = 0;
+    OC3CON2 = 0;
+    
+    OC3R = 7000;                // Set Output Compare value to achieve
+                                // desired duty cycle. This is the number
+                                // of timer counts when the OC should send
+                                // the PWM signal low. The duty cycle as a
+                                // fraction is OC1R/OC1RS.
+    
+                                // Tpwm = (OC1RS + 1) * Tcy * PRESCALE
+    
+    OC3RS = 79999;               // Period of OC1 to achieve desired PWM 
+                                // frequency, FPWM. See Equation 15-1
+                                // in the datasheet. For example, for
+                                // FPWM = 1 kHz, OC1RS = 3999. The OC1RS 
+                                // register contains the period when the
+                                // SYNCSEL bits are set to 0x1F (see FRM)
+    
+    // Configure OC1
+    OC3CON1bits.OCTSEL = 0b111; // System (peripheral) clock as timing source
+    OC3CON2bits.SYNCSEL = 0x1F;
+    
+    OC3CON1bits.OCM = 0b110;
+    OC3CON2bits.OCTRIG = 0;
+    
     OC1R = 3000;                // Set Output Compare value to achieve
                                 // desired duty cycle. This is the number
                                 // of timer counts when the OC should send
@@ -293,16 +339,14 @@ int main(void) {
     OC1CON1bits.OCM = 0b110;
     OC1CON2bits.OCTRIG = 0;
     _OC2IP=4; // Set Interrupt Priority
-    _OC2IE=1; // Enable OC2 Interrupt
+    _OC2IE=0; // Enable OC2 Interrupt
     _OC2IF=0; // turns flag off
    
-   _OC2IE=0; // NO LONGER NEEDED ATM
    
-   
-   // Timer for blinking laser!!!!!
-   _TON = 1;           // Turn off Timer1
-   _TCS = 0; // internal clock
-   _TCKPS = 0b11; // 256 prescale
+   // Timer for interrupting laser!!!!!
+   _TON = 1;           // Turn on Timer1
+   _TCS = 0;           // internal clock
+   _TCKPS = 0b11;      // 256 prescale
    
    _T1IP = 4;          // Select Timer1 interrupt priority
    _T1IE = 0;          // Enable Timer1 interrupt
@@ -310,6 +354,17 @@ int main(void) {
    PR1 = 15625;
    TMR1 = 0;
    
+   // Timer for black ball!!!!!
+//   T2CON.TON = 1;           // Turn off Timer2
+//   T2CON.TCS = 0;           // internal clock
+//   T2CON.T32 = 1;           // Make clock 32 bit
+//   T2CON.TCKPS = 0b11;      // 256 prescale
+//   
+//   _T2IP = 7;          // Select Timer2 interrupt priority
+//   _T2IE = 0;          // Enable Timer2 interrupt
+//   _T2IF = 0;          // Clear Timer2 interrupt flag
+//   PR2 = 15625;
+//   TMR2 = 0;
     
     //-----------------------------------------------------------
     // RUN
@@ -360,16 +415,43 @@ int main(void) {
                 setUpPosition++;
                 _RA2 = 1;
                 _OC2IE = 1;
-            } else if (setUpPosition == 
-                    
-                    CHANGESTATE) {
+            } else if (setUpPosition == CHANGESTATE) {
                 state++;
             
                 _T1IE = 1;
                 TMR1 = 0;
+                
+                // Turn off Goal IR Sensor
+                _CSS14 = 0;
+                
+                // Start checking the IR Sensors
+                _SMPI = 2;
+                _CSS12 = 1; // Left Sensor P15
+                _CSS11 = 1; // Center Sensor P16
+                _CSS10 = 1; // Right Sensor P17
+                
+                // Turn on interrupt
+                _CNIF = 0;
+                
+                // Turn on shooter
+                _LATB8 = 1;
             }
         } else if (state == SHOOTING) {
-            
+            if(blackBall) {
+                //PWM
+                //if()
+            } else if(ADC1BUF11 > 1365) {
+                //PWM
+                OC3R = 9500;
+            } else if(ADC1BUF12 > 1365) {
+                //PWM
+                OC3R = 6500;
+            } else if(ADC1BUF10 > 1365) {
+                //PWM
+                OC3R = 10500;
+             }else {
+                OC3R = 7000;
+            }
         }
 
     }
