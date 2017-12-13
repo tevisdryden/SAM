@@ -157,6 +157,14 @@ void __attribute__((interrupt, no_auto_psv)) _T2Interrupt(void)
     
 }
 
+void _ISR _ADC1Interrupt(void) {
+    if(ADC1BUF9 < 1365) {  
+        blackBall = 1;
+        TMR2 = 0;
+        _T2IE = 1;
+    }
+}
+
 int main(void) {
     _RCDIV = 0b010;
     
@@ -211,6 +219,9 @@ int main(void) {
     _TRISB14 = 1; // P17
     _ANSB14 = 1;
     
+    // Black Ball Sensor
+    _TRISB15 = 1; // P18
+    _ANSB15 = 1;
     
     /*** Select Voltage Reference Source ***/
     // use AVdd for positive reference
@@ -268,7 +279,11 @@ int main(void) {
     OC3CON1 = 0;
     OC3CON2 = 0;
     
-    OC3R = 1700;                // Set Output Compare value to achieve
+    
+    // Occelators 
+    int hz50 = 20000; 
+    
+    OC3R = hz50 * .07;                // Set Output Compare value to achieve
                                 // desired duty cycle. This is the number
                                 // of timer counts when the OC should send
                                 // the PWM signal low. The duty cycle as a
@@ -276,7 +291,7 @@ int main(void) {
     
                                 // Tpwm = (OC1RS + 1) * Tcy * PRESCALE
     
-    OC3RS = 33332;               // Period of OC1 to achieve desired PWM 
+    OC3RS = hz50 -1;               // Period of OC1 to achieve desired PWM 
                                 // frequency, FPWM. See Equation 15-1
                                 // in the datasheet. For example, for
                                 // FPWM = 1 kHz, OC1RS = 3999. The OC1RS 
@@ -298,7 +313,7 @@ int main(void) {
     
                                 // Tpwm = (OC1RS + 1) * Tcy * PRESCALE
     
-    OC1RS = 19999;               // Period of OC1 to achieve desired PWM 
+    OC1RS = hz50 - 1;               // Period of OC1 to achieve desired PWM 
                                 // frequency, FPWM. See Equation 15-1
                                 // in the datasheet. For example, for
                                 // FPWM = 1 kHz, OC1RS = 3999. The OC1RS 
@@ -356,16 +371,17 @@ int main(void) {
    TMR1 = 0;
    
    // Timer for black ball!!!!!
-//   T2CON.TON = 1;           // Turn off Timer2
-//   T2CON.TCS = 0;           // internal clock
-//   T2CON.T32 = 1;           // Make clock 32 bit
-//   T2CON.TCKPS = 0b11;      // 256 prescale
-//   
-//   _T2IP = 7;          // Select Timer2 interrupt priority
-//   _T2IE = 0;          // Enable Timer2 interrupt
-//   _T2IF = 0;          // Clear Timer2 interrupt flag
-//   PR2 = 15625;
-//   TMR2 = 0;
+   T2CON.TON = 1;           // Turn off Timer2
+   T2CON.TCS = 0;           // internal clock
+   T2CON.T32 = 1;           // Make clock 32 bit
+   T2CON.TCKPS = 0b11;      // 256 prescale
+   
+   _T2IP = 7;          // Select Timer2 interrupt priority
+   _T2IE = 0;          // Enable Timer2 interrupt
+   _T2IF = 0;          // Clear Timer2 interrupt flag
+   PR2 = 15625;
+   TMR2 = 0;
+   
     
     //-----------------------------------------------------------
     // RUN
@@ -378,6 +394,10 @@ int main(void) {
    int bumperDebouncer = 0;
    
    state = FINDINGCORNER;
+   
+   int leftGoalPWM = hz50 * .02;
+   int centerGoalPWM = hz50 * .07;
+   int rightGoalPWM = hz50 * .12;
    
    
     while(1)
@@ -434,39 +454,40 @@ int main(void) {
                 _CSS14 = 0;
                 
                 // Start checking the IR Sensors
-                _SMPI = 2;
+                _SMPI = 3;
                 _CSS12 = 1; // Left Sensor P15
                 _CSS11 = 1; // Center Sensor P16
                 _CSS10 = 1; // Right Sensor P17
+                _CSS9 = 1; // Black Ball Sensor P18
                 
-                // Turn on interrupt
-                _CNIF = 0;
-                
-                // Turn on shooter
-                _LATB8 = 1;
+//                // Turn on interrupt
+//                _AD1IE = 1;
+//                _AD1IP = 7;
+//                _AD1IF = 0;
+//                
+//                // Turn on shooter
+//                _LATB8 = 1;
             }
         } else if (state == SHOOTING) {
-            if (bumperDebouncer < 40000) {
-                OC3R = 1500;
-                bumperDebouncer++;
-            } else {
-                OC3R = 800;
+            if(blackBall) {
+                //PWM
+                if(OC3R <= centerGoalPWM) {
+                    OC3R = (centerGoalPWM + leftGoalPWM)/2;
+                } else {
+                    OC3R = (centerGoalPWM + rightGoalPWM)/2;
+                }
+            } else if(ADC1BUF11 > 1365) {
+                //PWM
+                OC3R = centerGoalPWM;
+            } else if(ADC1BUF12 > 1365) {
+                //PWM
+                OC3R = leftGoalPWM;
+            } else if(ADC1BUF10 > 1365) {
+                //PWM
+                OC3R = rightGoalPWM;
+             }else {
+                OC3R = hz50 * .05;
             }
-//            if(blackBall) {
-//                //PWM
-//                //if()
-//            } else if(ADC1BUF11 > 1365) {
-//                //PWM
-//                OC3R = 800;
-//            } else if(ADC1BUF12 > 1365) {
-//                //PWM
-//                OC3R = 1500;
-//            } else if(ADC1BUF10 > 1365) {
-//                //PWM
-//                OC3R = 1500;
-//             }else {
-//                OC3R = 1500;
-//            }
         }
 
     }
