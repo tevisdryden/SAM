@@ -141,7 +141,7 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void)
         OC1R = 10500/4;
         side = 0;
     } else {
-        OC1R = 9500/4;
+        OC1R = 10000/4;
         side = 1;
     }
     // Change state of pin 14 (RA6)
@@ -372,7 +372,7 @@ int main(void) {
    _T1IP = 4;          // Select Timer1 interrupt priority
    _T1IE = 0;          // Enable Timer1 interrupt
    _T1IF = 0;          // Clear Timer1 interrupt flag
-   PR1 = 15625/2;
+   PR1 = 15625/4;
    TMR1 = 0;
    
    // Timer for black ball!!!!!
@@ -400,16 +400,16 @@ int main(void) {
    
    state = FINDINGCORNER;
    
-   int leftGoalPWM = hz50 * .035;
-   int centerGoalPWM = hz50 * .07;
-   int rightGoalPWM = hz50 * .105;
+   int leftGoalPWM = hz50 * .0325;
+   int centerGoalPWM = hz50 * .0703;
+   int rightGoalPWM = hz50 * .1025;
    
    
     while(1)
     {
         if (state == FINDINGCORNER) {
             _RA2 = _RA0;
-            if((ADC1BUF14 > 1365)&& x == 100) {
+            if((ADC1BUF14 > 1365)&& x == 125) {
                 driveBackwards();
                 //driveForwards();
                 going = 1;
@@ -483,13 +483,13 @@ int main(void) {
                     } else {
                         OC3R = (centerGoalPWM + rightGoalPWM)/2;
                     }
-                } else if(ADC1BUF11 > 1365) {
+                } else if(ADC1BUF11 > 1265) {
                     //PWM
                     OC3R = centerGoalPWM;
-                } else if(ADC1BUF12 > 1365) {
+                } else if(ADC1BUF12 > 1579) {
                     //PWM
                     OC3R = leftGoalPWM;
-                } else if(ADC1BUF10 > 1365) {
+                } else if(ADC1BUF10 > 1000) {
                     //PWM
                     OC3R = rightGoalPWM;
                  }else {
