@@ -69,7 +69,7 @@ void __attribute__((interrupt, no_auto_psv)) _OC2Interrupt(void)
         }
         
         if(setUpPosition == DRIVEOUT) {
-            if(rev <= 2.1) {
+            if(rev <= 2.3) {
                 driveForwards();
             } else {
                 rev = 0;
@@ -78,7 +78,7 @@ void __attribute__((interrupt, no_auto_psv)) _OC2Interrupt(void)
                 setUpPosition++;
             }
         } else if(setUpPosition == DRIVEBACK) {
-            if(rev <= .7) {
+            if(rev <= .9) {
                 driveBackwards();
             } else {
                 rev = 0;
@@ -147,6 +147,8 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void)
     // Change state of pin 14 (RA6)
     
 }
+int shooterDebouncerMax = 10000;
+int shooterDebouncer = 0;
 
 int blackBall = 0;
 void __attribute__((interrupt, no_auto_psv)) _T2Interrupt(void)
@@ -154,6 +156,7 @@ void __attribute__((interrupt, no_auto_psv)) _T2Interrupt(void)
     _T2IF = 0;
     blackBall = 0;
     _T2IE = 0;
+    shooterDebouncer = shooterDebouncerMax;
     
 }
 
@@ -162,11 +165,13 @@ void _ISR _ADC1Interrupt(void) {
         blackBall = 1;
         TMR2 = 0;
         _T2IE = 1;
+        shooterDebouncer = shooterDebouncerMax;
     }
 }
 
 int main(void) {
     _RCDIV = 0b010;
+    shooterDebouncer = shooterDebouncerMax;
     
     /*** Configure Desired Port Pins as Analog Inputs ***/
     // TRIS 1 = Input
@@ -283,7 +288,7 @@ int main(void) {
     // Occelators 
     int hz50 = 20000; 
     
-    OC3R = hz50 * .07;                // Set Output Compare value to achieve
+    OC3R = hz50 * .123;                // Set Output Compare value to achieve
                                 // desired duty cycle. This is the number
                                 // of timer counts when the OC should send
                                 // the PWM signal low. The duty cycle as a
@@ -291,7 +296,7 @@ int main(void) {
     
                                 // Tpwm = (OC1RS + 1) * Tcy * PRESCALE
     
-    OC3RS = hz50 -1;               // Period of OC1 to achieve desired PWM 
+    OC3RS = hz50 - 1;               // Period of OC1 to achieve desired PWM 
                                 // frequency, FPWM. See Equation 15-1
                                 // in the datasheet. For example, for
                                 // FPWM = 1 kHz, OC1RS = 3999. The OC1RS 
@@ -367,14 +372,14 @@ int main(void) {
    _T1IP = 4;          // Select Timer1 interrupt priority
    _T1IE = 0;          // Enable Timer1 interrupt
    _T1IF = 0;          // Clear Timer1 interrupt flag
-   PR1 = 15625/4;
+   PR1 = 15625/2;
    TMR1 = 0;
    
    // Timer for black ball!!!!!
-   T2CON.TON = 1;           // Turn off Timer2
-   T2CON.TCS = 0;           // internal clock
-   T2CON.T32 = 1;           // Make clock 32 bit
-   T2CON.TCKPS = 0b11;      // 256 prescale
+   T2CONbits.TON = 1;           // Turn off Timer2
+   T2CONbits.TCS = 0;           // internal clock
+   T2CONbits.T32 = 1;           // Make clock 32 bit
+   T2CONbits.TCKPS = 0b11;      // 256 prescale
    
    _T2IP = 7;          // Select Timer2 interrupt priority
    _T2IE = 0;          // Enable Timer2 interrupt
@@ -395,9 +400,9 @@ int main(void) {
    
    state = FINDINGCORNER;
    
-   int leftGoalPWM = hz50 * .02;
+   int leftGoalPWM = hz50 * .035;
    int centerGoalPWM = hz50 * .07;
-   int rightGoalPWM = hz50 * .12;
+   int rightGoalPWM = hz50 * .105;
    
    
     while(1)
@@ -469,25 +474,30 @@ int main(void) {
 //                _LATB8 = 1;
             }
         } else if (state == SHOOTING) {
-            if(blackBall) {
-                //PWM
-                if(OC3R <= centerGoalPWM) {
-                    OC3R = (centerGoalPWM + leftGoalPWM)/2;
-                } else {
-                    OC3R = (centerGoalPWM + rightGoalPWM)/2;
+            if (shooterDebouncer >= shooterDebouncerMax) {
+                shooterDebouncer = 0;
+                if(blackBall) {
+                    //PWM
+                    if(OC3R <= centerGoalPWM) {
+                        OC3R = (centerGoalPWM + leftGoalPWM)/2;
+                    } else {
+                        OC3R = (centerGoalPWM + rightGoalPWM)/2;
+                    }
+                } else if(ADC1BUF11 > 1365) {
+                    //PWM
+                    OC3R = centerGoalPWM;
+                } else if(ADC1BUF12 > 1365) {
+                    //PWM
+                    OC3R = leftGoalPWM;
+                } else if(ADC1BUF10 > 1365) {
+                    //PWM
+                    OC3R = rightGoalPWM;
+                 }else {
+//                    OC3R = hz50 * .05;
                 }
-            } else if(ADC1BUF11 > 1365) {
-                //PWM
-                OC3R = centerGoalPWM;
-            } else if(ADC1BUF12 > 1365) {
-                //PWM
-                OC3R = leftGoalPWM;
-            } else if(ADC1BUF10 > 1365) {
-                //PWM
-                OC3R = rightGoalPWM;
-             }else {
-                OC3R = hz50 * .05;
-            }
+            } else {
+                shooterDebouncer++;
+            } 
         }
 
     }
